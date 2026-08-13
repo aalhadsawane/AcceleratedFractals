@@ -25,31 +25,15 @@ body {
   display: block;
 }
 
-#overlay {
-  position: fixed;
-  top: 1rem;
-  left: 1rem;
-  z-index: 1;
-  width: min(90vw, 38rem);
-  padding: 0.85rem 1rem;
-  border-radius: 0.75rem;
-  background: rgba(2, 6, 23, 0.68);
-  backdrop-filter: blur(3px);
-  border: 1px solid rgba(148, 163, 184, 0.3);
-}
-
-h1 {
-  margin: 0;
-  font-size: 1.15rem;
-}
-
-p {
-  margin: 0.45rem 0 0;
-  font-size: 0.9rem;
-  line-height: 1.35;
-}
-
 #stats {
+  position: fixed;
+  left: 0.9rem;
+  bottom: 0.9rem;
+  z-index: 1;
+  margin: 0;
+  font-size: 0.9rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  color: #93c5fd;
+  color: #7dd3fc;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.45);
+  pointer-events: none;
 }
