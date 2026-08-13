@@ -1,14 +1,7 @@
 import './style.css'
 
 document.querySelector('#app').innerHTML = `
-  <div id="overlay">
-    <h1>Accelerated Fibonacci Fractals</h1>
-    <p>
-      Move your cursor across the canvas. The Fibonacci index comes from mouse X and
-      is calculated with matrix exponentiation.
-    </p>
-    <p id="stats" aria-live="polite"></p>
-  </div>
+  <p id="stats" aria-live="polite"></p>
   <canvas id="fractal-canvas" aria-label="Interactive fractal canvas"></canvas>
 `
 
@@ -35,38 +28,82 @@ uniform vec2 u_resolution;
 uniform vec2 u_mouse;
 uniform float u_time;
 uniform float u_fib;
-uniform float u_prevFib;
+
+vec3 neonPalette(float t, float time) {
+  vec3 a = vec3(0.25, 0.28, 0.35);
+  vec3 b = vec3(0.55, 0.45, 0.65);
+  vec3 c = vec3(1.0, 1.15, 1.35);
+  vec3 d = vec3(0.02, 0.21, 0.42)
+    + vec3(
+      0.10 * sin(time * 0.13),
+      0.08 * cos(time * 0.09),
+      0.06 * sin(time * 0.11)
+    );
+  return a + b * cos(6.28318 * (c * t + d));
+}
+
+float gridLine(float value, float width) {
+  float d = abs(fract(value) - 0.5);
+  return 1.0 - smoothstep(0.0, width, d);
+}
 
 void main() {
   vec2 uv = (gl_FragCoord.xy / u_resolution.xy) * 2.0 - 1.0;
   uv.x *= u_resolution.x / max(u_resolution.y, 1.0);
 
-  float fibNorm = log(max(u_fib, 1.0)) / 12.0;
-  float zoom = 0.8 + fibNorm;
+  float fibNorm = log(max(u_fib, 1.0)) / 14.0;
+  float zoom = 1.4 + fibNorm * 1.8;
   vec2 c = vec2(
-    (u_mouse.x - 0.5) * 0.8 + 0.12 * sin(u_time * 0.2),
-    (u_mouse.y - 0.5) * 0.8 + 0.12 * cos(u_time * 0.18)
+    (u_mouse.x - 0.5) * 0.7 + 0.08 * sin(u_time * 0.25),
+    (u_mouse.y - 0.5) * 0.7 + 0.08 * cos(u_time * 0.22)
   );
 
   vec2 z = uv / zoom;
-  float maxIter = 30.0 + mod(u_prevFib, 70.0);
+  float maxIter = 90.0 + fibNorm * 120.0;
   float iter = 0.0;
+  bool escaped = false;
 
-  for (int i = 0; i < 160; i++) {
+  for (int i = 0; i < 220; i++) {
     if (iter >= maxIter) break;
-    vec2 z2 = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
-    z = z2;
-    if (dot(z, z) > 12.0) break;
+    z = vec2(abs(z.x), abs(z.y));
+    z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
+    if (dot(z, z) > 64.0) {
+      escaped = true;
+      break;
+    }
     iter += 1.0;
   }
 
-  float t = iter / maxIter;
-  float pulse = 0.15 * sin(u_time + t * 7.0);
-  vec3 color = vec3(
-    0.1 + 0.9 * t + pulse,
-    0.12 + 0.5 * (1.0 - t),
-    0.25 + 0.9 * (1.0 - t * t)
+  float smoothIter = iter;
+  if (escaped) {
+    float mag = max(dot(z, z), 1.0001);
+    smoothIter = iter + 1.0 - log2(log2(mag));
+  }
+
+  float t = clamp(smoothIter / maxIter, 0.0, 1.0);
+  vec2 gridUv = uv * 5.0;
+  float majorGrid = max(gridLine(gridUv.x, 0.035), gridLine(gridUv.y, 0.035));
+  float minorGrid = max(gridLine(gridUv.x * 2.0, 0.02), gridLine(gridUv.y * 2.0, 0.02));
+
+  vec3 background = vec3(0.018, 0.028, 0.048);
+  background += minorGrid * vec3(0.02, 0.035, 0.05);
+  background += majorGrid * vec3(0.045, 0.085, 0.13);
+
+  vec3 neon = neonPalette(t + 0.12 * sin(u_time * 0.4), u_time);
+  float glow = pow(1.0 - t, 2.2);
+  vec3 fractal = neon * (0.55 + 1.5 * glow);
+  float band = 0.5 + 0.5 * cos(t * 55.0 - u_time * 0.9);
+  fractal *= 0.85 + 0.3 * band;
+
+  vec3 interior = background + vec3(0.02, 0.04, 0.06) * (0.45 + 0.55 * sin(u_time * 0.6));
+  vec3 color = mix(
+    interior,
+    fractal,
+    escaped ? 1.0 : 0.0
   );
+  color += majorGrid * 0.035;
+  color = clamp(color, 0.0, 1.0);
+
   gl_FragColor = vec4(color, 1.0);
 }
 `
@@ -146,7 +183,6 @@ const resolutionLocation = gl.getUniformLocation(program, 'u_resolution')
 const mouseLocation = gl.getUniformLocation(program, 'u_mouse')
 const timeLocation = gl.getUniformLocation(program, 'u_time')
 const fibLocation = gl.getUniformLocation(program, 'u_fib')
-const prevFibLocation = gl.getUniformLocation(program, 'u_prevFib')
 
 const positionBuffer = gl.createBuffer()
 gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
@@ -187,14 +223,15 @@ window.addEventListener('mousemove', (event) => {
 function render(time) {
   resizeCanvasToDisplaySize()
 
-  const fibonacciIndex = Math.max(2, Math.floor(mouse.x * 42) + 2)
+  const minIndex = 10
+  const maxIndex = 72
+  const fibonacciIndex = Math.floor(mouse.x * (maxIndex - minIndex + 1)) + minIndex
   const [fib, prevFib] = fibonacciPair(fibonacciIndex)
 
   gl.uniform2f(resolutionLocation, canvas.width, canvas.height)
   gl.uniform2f(mouseLocation, mouse.x, mouse.y)
   gl.uniform1f(timeLocation, time * 0.001)
   gl.uniform1f(fibLocation, fib)
-  gl.uniform1f(prevFibLocation, prevFib)
 
   stats.textContent = `n=${fibonacciIndex}, f(n)=${fib}, f(n-1)=${prevFib}`
 
