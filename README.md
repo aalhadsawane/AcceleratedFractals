@@ -1,6 +1,6 @@
 # AcceleratedFractals
 
-Interactive fractal website where mouse hover controls a Fibonacci-driven Mandelbrot view rendered on the GPU.
+Interactive fractal website where mouse hover controls a Fibonacci-driven, continuously animated fractal rendered on the GPU.
 
 ## Mathematical core
 
@@ -12,13 +12,13 @@ The app uses matrix exponentiation to compute Fibonacci pairs in `O(log n)` time
 
 The computed `f(n)` and `f(n-1)` values are displayed live on-canvas for the selected index.
 
-The fragment shader uses `n` to morph between Mandelbrot and animated Julia dynamics:
+The fragment shader uses `n`, `x`, `y`, and time to drive a constantly changing nonlinear recurrence:
 
 \[
-z_{k+1} = (1-\alpha(n))\,(z_k^2 + c) + \alpha(n)\,(z_k^2 + j(t,n))
+z_{k+1} = z_k^2 + c(t,n,x,y) + w(z_k,t,x,y)
 \]
 
-where `\alpha(n)` grows with normalized `n`, and `j(t,n)` is a time-varying complex seed. This keeps the fractal alive over time while making horizontal movement (`n`) visibly change geometry.
+where `c(t,n,x,y)` is a time-varying complex driver and `w(z_k,t,x,y)` is a sinusoidal warp term. This removes static Mandelbrot panning behavior and keeps the entire frame in active motion.
 
 ## Controls
 
@@ -27,11 +27,11 @@ where `\alpha(n)` grows with normalized `n`, and `j(t,n)` is a time-varying comp
 - **Y position → `y`**  
   Vertical mouse position maps to a normalized `y` value in **[0, 1]**, and also to a signed offset `yΔ` shown on-canvas.
 - **Effect of `y` on fractal**  
-  `y` shifts the Mandelbrot center on the imaginary axis and changes interior coloring, so moving vertically changes both structure and color distribution.
+  `y` changes warp intensity and animation phase so vertical movement continuously reshapes the flow and palette.
 
 ## Stability behavior
 
-The view stays centered in a stable region, but structure now evolves over time (instead of only palette drift). A hard delta cutoff is also applied during iteration so extremely tiny branch-like detail is clamped once it falls below a threshold, preventing over-rendering of imperceptible micro-structures.
+The frame is always filled by the fractal shader and continuously evolves over time. Coloring is orbit-trap driven so the screen never falls back to a blank grid.
 
 ## Rendering and acceleration
 
