@@ -27,7 +27,8 @@ precision highp float;
 uniform vec2 u_resolution;
 uniform vec2 u_mouse;
 uniform float u_time;
-uniform float u_fib;
+uniform float u_n_norm;
+uniform float u_y;
 
 vec3 neonPalette(float t, float time) {
   vec3 a = vec3(0.25, 0.28, 0.35);
@@ -51,23 +52,25 @@ void main() {
   vec2 uv = (gl_FragCoord.xy / u_resolution.xy) * 2.0 - 1.0;
   uv.x *= u_resolution.x / max(u_resolution.y, 1.0);
 
-  float fibNorm = log(max(u_fib, 1.0)) / 14.0;
-  float zoom = 1.4 + fibNorm * 1.8;
-  vec2 c = vec2(
-    (u_mouse.x - 0.5) * 0.7 + 0.08 * sin(u_time * 0.25),
-    (u_mouse.y - 0.5) * 0.7 + 0.08 * cos(u_time * 0.22)
+  float zoom = mix(1.0, 14.0, pow(u_n_norm, 1.12));
+  vec2 center = vec2(
+    -0.743643887 + 0.14 * sin(u_time * 0.05 + u_n_norm * 3.14159),
+    0.131825904 + (u_y - 0.5) * 0.65
   );
-
-  vec2 z = uv / zoom;
-  float maxIter = 90.0 + fibNorm * 120.0;
+  vec2 c = uv / zoom + center;
+  vec2 z = vec2(0.0);
+  float maxIter = 120.0 + 260.0 * u_n_norm;
   float iter = 0.0;
   bool escaped = false;
+  float trap = 10.0;
 
-  for (int i = 0; i < 220; i++) {
+  for (int i = 0; i < 400; i++) {
     if (iter >= maxIter) break;
-    z = vec2(abs(z.x), abs(z.y));
-    z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
-    if (dot(z, z) > 64.0) {
+    float zx = z.x * z.x - z.y * z.y + c.x;
+    float zy = 2.0 * z.x * z.y + c.y;
+    z = vec2(zx, zy);
+    trap = min(trap, length(z));
+    if (dot(z, z) > 256.0) {
       escaped = true;
       break;
     }
@@ -81,25 +84,27 @@ void main() {
   }
 
   float t = clamp(smoothIter / maxIter, 0.0, 1.0);
+  float trapTone = exp(-7.0 * trap);
   vec2 gridUv = uv * 5.0;
   float majorGrid = max(gridLine(gridUv.x, 0.035), gridLine(gridUv.y, 0.035));
   float minorGrid = max(gridLine(gridUv.x * 2.0, 0.02), gridLine(gridUv.y * 2.0, 0.02));
 
-  vec3 background = vec3(0.018, 0.028, 0.048);
-  background += minorGrid * vec3(0.02, 0.035, 0.05);
-  background += majorGrid * vec3(0.045, 0.085, 0.13);
+  vec3 background = vec3(0.03, 0.045, 0.075);
+  background += minorGrid * vec3(0.03, 0.045, 0.065);
+  background += majorGrid * vec3(0.05, 0.09, 0.14);
 
-  vec3 neon = neonPalette(t + 0.12 * sin(u_time * 0.4), u_time);
-  float glow = pow(1.0 - t, 2.2);
-  vec3 fractal = neon * (0.55 + 1.5 * glow);
+  vec3 neon = neonPalette(t + 0.08 * sin(u_time * 0.35), u_time);
+  float glow = pow(1.0 - min(t, 0.999), 2.0);
+  vec3 fractal = neon * (0.7 + 1.7 * glow);
   float band = 0.5 + 0.5 * cos(t * 55.0 - u_time * 0.9);
-  fractal *= 0.85 + 0.3 * band;
+  fractal *= 0.85 + 0.25 * band;
 
-  vec3 interior = background + vec3(0.02, 0.04, 0.06) * (0.45 + 0.55 * sin(u_time * 0.6));
+  vec3 interior = neonPalette(0.2 + 0.55 * trapTone + 0.2 * u_y, u_time * 0.65);
+  interior = interior * (0.45 + 0.55 * trapTone) + background * 0.5;
   vec3 color = mix(
     interior,
     fractal,
-    escaped ? 1.0 : 0.0
+    escaped ? 1.0 : 0.2
   );
   color += majorGrid * 0.035;
   color = clamp(color, 0.0, 1.0);
@@ -182,7 +187,8 @@ const positionLocation = gl.getAttribLocation(program, 'a_position')
 const resolutionLocation = gl.getUniformLocation(program, 'u_resolution')
 const mouseLocation = gl.getUniformLocation(program, 'u_mouse')
 const timeLocation = gl.getUniformLocation(program, 'u_time')
-const fibLocation = gl.getUniformLocation(program, 'u_fib')
+const nNormLocation = gl.getUniformLocation(program, 'u_n_norm')
+const yLocation = gl.getUniformLocation(program, 'u_y')
 
 const positionBuffer = gl.createBuffer()
 gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
@@ -223,17 +229,23 @@ window.addEventListener('mousemove', (event) => {
 function render(time) {
   resizeCanvasToDisplaySize()
 
-  const minIndex = 10
-  const maxIndex = 72
-  const fibonacciIndex = Math.floor(mouse.x * (maxIndex - minIndex + 1)) + minIndex
+  const minIndex = 0
+  const maxIndex = 48
+  const fibonacciIndex = Math.min(
+    maxIndex,
+    Math.floor(mouse.x * (maxIndex - minIndex + 1)) + minIndex,
+  )
+  const nNorm = (fibonacciIndex - minIndex) / Math.max(maxIndex - minIndex, 1)
+  const yInfluence = (mouse.y - 0.5) * 0.65
   const [fib, prevFib] = fibonacciPair(fibonacciIndex)
 
   gl.uniform2f(resolutionLocation, canvas.width, canvas.height)
   gl.uniform2f(mouseLocation, mouse.x, mouse.y)
   gl.uniform1f(timeLocation, time * 0.001)
-  gl.uniform1f(fibLocation, fib)
+  gl.uniform1f(nNormLocation, nNorm)
+  gl.uniform1f(yLocation, mouse.y)
 
-  stats.textContent = `n=${fibonacciIndex}, f(n)=${fib}, f(n-1)=${prevFib}`
+  stats.textContent = `n=${fibonacciIndex} f(n)=${fib} f(n-1)=${prevFib} y=${mouse.y.toFixed(3)} yΔ=${yInfluence.toFixed(3)}`
 
   gl.drawArrays(gl.TRIANGLES, 0, 6)
   requestAnimationFrame(render)
