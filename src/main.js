@@ -52,13 +52,17 @@ void main() {
   vec2 uv = (gl_FragCoord.xy / u_resolution.xy) * 2.0 - 1.0;
   uv.x *= u_resolution.x / max(u_resolution.y, 1.0);
 
-  float zoom = mix(1.0, 14.0, pow(u_n_norm, 1.12));
+  float zoom = mix(0.95, 9.5, pow(u_n_norm, 0.9));
   vec2 center = vec2(
-    -0.743643887 + 0.14 * sin(u_time * 0.05 + u_n_norm * 3.14159),
-    0.131825904 + (u_y - 0.5) * 0.65
+    -0.615 + 0.05 * sin(u_time * 0.11),
+    (u_y - 0.5) * 0.85
   );
   vec2 c = uv / zoom + center;
   vec2 z = vec2(0.0);
+  float morph = 0.18 + 0.72 * pow(u_n_norm, 0.9);
+  float phase = u_time * (0.32 + 0.65 * morph) + u_n_norm * 6.28318;
+  vec2 juliaSeed = vec2(-0.72, 0.24) + 0.23 * vec2(cos(phase), sin(phase * 0.87));
+  float branchCutoff = mix(0.00002, 0.00028, morph);
   float maxIter = 120.0 + 260.0 * u_n_norm;
   float iter = 0.0;
   bool escaped = false;
@@ -66,10 +70,17 @@ void main() {
 
   for (int i = 0; i < 400; i++) {
     if (iter >= maxIter) break;
+    vec2 prevZ = z;
     float zx = z.x * z.x - z.y * z.y + c.x;
     float zy = 2.0 * z.x * z.y + c.y;
-    z = vec2(zx, zy);
+    vec2 mandelStep = vec2(zx, zy);
+    vec2 juliaStep = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + juliaSeed;
+    z = mix(mandelStep, juliaStep, morph);
     trap = min(trap, length(z));
+    if (iter > 20.0 && length(z - prevZ) < branchCutoff) {
+      iter = maxIter;
+      break;
+    }
     if (dot(z, z) > 256.0) {
       escaped = true;
       break;
