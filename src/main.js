@@ -43,81 +43,47 @@ vec3 neonPalette(float t, float time) {
   return a + b * cos(6.28318 * (c * t + d));
 }
 
-float gridLine(float value, float width) {
-  float d = abs(fract(value) - 0.5);
-  return 1.0 - smoothstep(0.0, width, d);
-}
-
 void main() {
   vec2 uv = (gl_FragCoord.xy / u_resolution.xy) * 2.0 - 1.0;
   uv.x *= u_resolution.x / max(u_resolution.y, 1.0);
-
-  float zoom = mix(0.95, 9.5, pow(u_n_norm, 0.9));
-  vec2 center = vec2(
-    -0.615 + 0.05 * sin(u_time * 0.11),
-    (u_y - 0.5) * 0.85
+  float t = u_time;
+  float mouseWarp = (u_mouse.x - 0.5) * 1.6;
+  float verticalWarp = (u_y - 0.5) * 1.2;
+  float angle = t * (0.09 + 0.11 * u_n_norm) + mouseWarp;
+  mat2 rot = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
+  vec2 z = rot * (uv * (1.15 + 0.6 * sin(t * 0.17 + verticalWarp)));
+  vec2 c = vec2(
+    0.48 * cos(t * 0.31 + 3.2 * u_n_norm + verticalWarp),
+    0.48 * sin(t * 0.23 - 2.8 * u_n_norm - mouseWarp)
   );
-  vec2 c = uv / zoom + center;
-  vec2 z = vec2(0.0);
-  float morph = 0.18 + 0.72 * pow(u_n_norm, 0.9);
-  float phase = u_time * (0.32 + 0.65 * morph) + u_n_norm * 6.28318;
-  vec2 juliaSeed = vec2(-0.72, 0.24) + 0.23 * vec2(cos(phase), sin(phase * 0.87));
-  float branchCutoff = mix(0.00002, 0.00028, morph);
-  float maxIter = 120.0 + 260.0 * u_n_norm;
+  float maxIter = 140.0 + 260.0 * u_n_norm;
   float iter = 0.0;
-  bool escaped = false;
   float trap = 10.0;
 
-  for (int i = 0; i < 400; i++) {
+  for (int i = 0; i < 420; i++) {
     if (iter >= maxIter) break;
-    vec2 prevZ = z;
-    float zx = z.x * z.x - z.y * z.y + c.x;
-    float zy = 2.0 * z.x * z.y + c.y;
-    vec2 mandelStep = vec2(zx, zy);
-    vec2 juliaStep = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + juliaSeed;
-    z = mix(mandelStep, juliaStep, morph);
+    z = vec2(
+      z.x * z.x - z.y * z.y,
+      2.0 * z.x * z.y
+    ) + c;
+    z += 0.16 * vec2(
+      sin(2.7 * z.y + t * 0.9 + verticalWarp * 5.0),
+      cos(2.4 * z.x - t * 0.8 + mouseWarp * 4.0)
+    );
     trap = min(trap, length(z));
-    if (iter > 20.0 && length(z - prevZ) < branchCutoff) {
-      iter = maxIter;
-      break;
-    }
-    if (dot(z, z) > 256.0) {
-      escaped = true;
-      break;
-    }
+    if (dot(z, z) > 120.0) break;
     iter += 1.0;
   }
 
-  float smoothIter = iter;
-  if (escaped) {
-    float mag = max(dot(z, z), 1.0001);
-    smoothIter = iter + 1.0 - log2(log2(mag));
-  }
+  float normalizedIter = clamp(iter / maxIter, 0.0, 1.0);
+  float trapTone = exp(-4.8 * trap);
+  float pulse = 0.5 + 0.5 * sin(t * 1.6 + normalizedIter * 28.0 + trap * 9.0);
 
-  float t = clamp(smoothIter / maxIter, 0.0, 1.0);
-  float trapTone = exp(-7.0 * trap);
-  vec2 gridUv = uv * 5.0;
-  float majorGrid = max(gridLine(gridUv.x, 0.035), gridLine(gridUv.y, 0.035));
-  float minorGrid = max(gridLine(gridUv.x * 2.0, 0.02), gridLine(gridUv.y * 2.0, 0.02));
-
-  vec3 background = vec3(0.03, 0.045, 0.075);
-  background += minorGrid * vec3(0.03, 0.045, 0.065);
-  background += majorGrid * vec3(0.05, 0.09, 0.14);
-
-  vec3 neon = neonPalette(t + 0.08 * sin(u_time * 0.35), u_time);
-  float glow = pow(1.0 - min(t, 0.999), 2.0);
-  vec3 fractal = neon * (0.7 + 1.7 * glow);
-  float band = 0.5 + 0.5 * cos(t * 55.0 - u_time * 0.9);
-  fractal *= 0.85 + 0.25 * band;
-
-  vec3 interior = neonPalette(0.2 + 0.55 * trapTone + 0.2 * u_y, u_time * 0.65);
-  interior = interior * (0.45 + 0.55 * trapTone) + background * 0.5;
-  vec3 color = mix(
-    interior,
-    fractal,
-    escaped ? 1.0 : 0.2
-  );
-  color += majorGrid * 0.035;
+  vec3 base = neonPalette(normalizedIter + trapTone * 0.45 + pulse * 0.22, t);
+  vec3 accent = neonPalette(0.75 + trapTone * 0.35 + u_n_norm * 0.3, t * 0.73);
+  vec3 color = mix(base, accent, 0.42 + 0.38 * pulse);
+  color *= 0.55 + 1.3 * trapTone + 0.35 * (1.0 - normalizedIter);
+  color += 0.16 * neonPalette(fract(trap * 2.2 + t * 0.05), t * 1.2);
   color = clamp(color, 0.0, 1.0);
 
   gl_FragColor = vec4(color, 1.0);
@@ -256,7 +222,7 @@ function render(time) {
   gl.uniform1f(nNormLocation, nNorm)
   gl.uniform1f(yLocation, mouse.y)
 
-  stats.textContent = `n=${fibonacciIndex} f(n)=${fib} f(n-1)=${prevFib} y=${mouse.y.toFixed(3)} yΔ=${yInfluence.toFixed(3)}`
+  stats.textContent = `n=${fibonacciIndex} f(n)=${fib} f(n-1)=${prevFib} warpX=${mouse.x.toFixed(3)} warpY=${yInfluence.toFixed(3)}`
 
   gl.drawArrays(gl.TRIANGLES, 0, 6)
   requestAnimationFrame(render)
