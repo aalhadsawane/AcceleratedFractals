@@ -12,6 +12,14 @@ The app uses matrix exponentiation to compute Fibonacci pairs in `O(log n)` time
 
 The computed `f(n)` and `f(n-1)` values are displayed live on-canvas for the selected index.
 
+The fragment shader uses `n` to morph between Mandelbrot and animated Julia dynamics:
+
+\[
+z_{k+1} = (1-\alpha(n))\,(z_k^2 + c) + \alpha(n)\,(z_k^2 + j(t,n))
+\]
+
+where `\alpha(n)` grows with normalized `n`, and `j(t,n)` is a time-varying complex seed. This keeps the fractal alive over time while making horizontal movement (`n`) visibly change geometry.
+
 ## Controls
 
 - **X position → `n`**  
@@ -23,7 +31,7 @@ The computed `f(n)` and `f(n-1)` values are displayed live on-canvas for the sel
 
 ## Stability behavior
 
-The fractal no longer drifts into a mostly dark field over time. Time is now used for gentle palette motion, while fractal structure remains anchored to a stable Mandelbrot region so details continue appearing instead of fading out.
+The view stays centered in a stable region, but structure now evolves over time (instead of only palette drift). A hard delta cutoff is also applied during iteration so extremely tiny branch-like detail is clamped once it falls below a threshold, preventing over-rendering of imperceptible micro-structures.
 
 ## Rendering and acceleration
 
